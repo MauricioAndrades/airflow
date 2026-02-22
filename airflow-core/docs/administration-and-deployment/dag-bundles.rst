@@ -139,7 +139,76 @@ are configured so that impersonated users can access bundle files created by the
     the need for shared group permissions.
 
 
-Writing custom Dag bundles
+Python imports and module management with DAG bundles
+------------------------------------------------------
+
+When Airflow processes a Dag file or executes a task, it places the **bundle root directory** on
+``sys.path``. This means Python code can be imported using paths relative to the bundle root without
+any prefix. Code outside the bundle is not automatically importable.
+
+.. code-block:: none
+
+   my_bundle/              ← bundle root (placed on sys.path)
+   ├── my_dag.py           ← DAG file
+   ├── helpers/
+   │   ├── __init__.py
+   │   └── utils.py        ← importable as: from helpers.utils import ...
+   └── common/
+       ├── __init__.py
+       └── shared.py       ← importable as: from common.shared import ...
+
+With the layout above, a Dag file can do:
+
+.. code-block:: python
+
+   from helpers.utils import my_helper
+   from common.shared import MyClass
+
+Any directory **outside** the bundle root (for example a separate shared library directory) is **not**
+placed on ``sys.path`` automatically, so bare imports of that code will fail.
+
+Migrating from Airflow 2 (``DAGS_FOLDER`` on ``PYTHONPATH``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In Airflow 2, the ``dags`` folder was globally added to ``sys.path``, making top-level imports like
+``import my_shared_lib`` work from any file under ``DAGS_FOLDER``. In Airflow 3, this global
+entry is replaced by the per-bundle mechanism described above. The practical result is:
+
+- Code that lives **inside** the bundle root continues to work with bare imports.
+- Code that lives **outside** the bundle root (for example a monorepo ``libs/`` directory) is no
+  longer importable unless you take one of the actions below.
+
+Options for sharing code across bundles or with external directories
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. **Place the shared code inside the bundle directory.**
+   Copy or symlink your shared library into the bundle so that it is at the bundle root.
+   This is the simplest approach and requires no changes to your import statements.
+
+2. **Install the shared code as a Python package.**
+   Package your shared library with a ``pyproject.toml`` / ``setup.py`` and install it into the
+   Airflow Python environment (e.g. ``pip install -e ./libs/common``). Once installed it is
+   available on ``sys.path`` everywhere, including inside bundles.
+
+3. **Set the** ``PYTHONPATH`` **environment variable.**
+   Add the path to your external library to the ``PYTHONPATH`` environment variable before
+   starting Airflow. Python prepends ``PYTHONPATH`` entries to ``sys.path`` for every process,
+   including the Dag processor and worker subprocesses:
+
+   .. code-block:: bash
+
+       export PYTHONPATH=/path/to/libs/common:/path/to/libs/orm
+
+   This is useful for monorepo layouts where shared code lives outside the Dag bundle.
+
+.. note::
+
+   Triggers cannot import from Dag bundles at all. Trigger code must be available on ``sys.path``
+   via installed packages or ``PYTHONPATH``. This is because the triggerer component does not
+   initialize DAG bundles. See the **Triggerer Limitation** note in `Writing custom DAG bundles`_
+   for more details.
+
+Writing custom DAG bundles
 --------------------------
 
 When implementing your own Dag bundle by extending the ``BaseDagBundle`` class, there are several methods you must implement. Below is a guide to help you implement a custom Dag bundle.

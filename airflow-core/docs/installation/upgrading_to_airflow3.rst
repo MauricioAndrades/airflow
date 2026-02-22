@@ -185,7 +185,46 @@ code import Airflow components correctly in Airflow 3. The older paths are depre
 - **Airflow 3.1**: Legacy imports show deprecation warnings but continue to work
 - **Future Airflow version**: Legacy imports will be **removed**
 
-Step 4: Install the Standard Provider
+Step 4: Review DAG imports and module management
+------------------------------------------------
+
+Airflow 3 introduces :doc:`/administration-and-deployment/dag-bundles` which changes how Python
+modules are resolved inside Dag files.
+
+**What changed:** In Airflow 2, the ``DAGS_FOLDER`` was automatically added to ``sys.path`` for
+every Airflow process.  In Airflow 3, this global entry is replaced by a per-bundle mechanism:
+Airflow adds each bundle's root directory to ``sys.path`` during Dag processing and task
+execution.  Code outside the bundle root is **not** on ``sys.path`` automatically.
+
+**What still works without changes:**
+
+- Shared Python files that live **inside** the bundle directory (e.g. alongside the Dag files)
+  continue to be importable with bare imports:
+
+  .. code-block:: python
+
+      from my_helpers import some_util   # my_helpers/ is inside the bundle root
+
+**What needs attention:**
+
+- Shared libraries that live **outside** the bundle (e.g. a monorepo ``libs/`` directory) are no
+  longer importable unless you take explicit action.
+
+**Migration options for external shared code:**
+
+1. **Copy or symlink the shared library into the bundle directory** so it is at the bundle root.
+2. **Install the shared library as a Python package** (``pip install -e ./libs/common``).  Once
+   installed it is available everywhere.
+3. **Set the** ``PYTHONPATH`` **environment variable** before starting Airflow:
+
+   .. code-block:: bash
+
+       export PYTHONPATH=/path/to/libs/common:/path/to/libs/orm
+
+See :doc:`/administration-and-deployment/dag-bundles` and
+:doc:`/administration-and-deployment/modules_management` for full details.
+
+Step 5: Install the Standard Provider
 --------------------------------------
 
 - Some of the commonly used Operators, Sensors, and Triggers which were bundled as part of the ``airflow-core`` package (for example ``BashOperator``, ``PythonOperator``, ``ExternalTaskSensor``, ``FileSensor``, etc.)
@@ -193,7 +232,7 @@ Step 4: Install the Standard Provider
 - For convenience, this package can also be installed on Airflow 2.x versions, so that Dags can be modified to reference these Operators from the standard provider
   package instead of Airflow Core.
 
-Step 5: Review custom written tasks for direct DB access
+Step 6: Review custom written tasks for direct DB access
 --------------------------------------------------------
 
 In Airflow 3, operators cannot access the Airflow metadata database directly using database sessions.
@@ -283,7 +322,7 @@ You can also use ``SQLExecuteQueryOperator`` if you prefer to use operators inst
 .. note::
    Always use **read-only database credentials** for metadata database connections and it is recommended to use temporary credentials.
 
-Step 6: Deployment Managers - Upgrade your Airflow Instance
+Step 7: Deployment Managers - Upgrade your Airflow Instance
 ------------------------------------------------------------
 
 For an easier and safer upgrade process, we have also created a utility to upgrade your Airflow instance configuration.
@@ -318,7 +357,7 @@ and FastAPI middlewares (``fastapi_root_middlewares``).
 If you use the Airflow Helm Chart to deploy Airflow, please check your defined values against configuration options available in Airflow 3.
 All configuration options below ``webserver`` need to be changed to ``apiServer``. Consider that many parameters have been renamed or removed.
 
-Step 7: Changes to your startup scripts
+Step 8: Changes to your startup scripts
 ---------------------------------------
 
 In Airflow 3, the Webserver has become a generic API server. The API server can be started up using the following command:
@@ -335,7 +374,7 @@ The Dag processor must now be started independently, even for local or developme
 
 You should now be able to start up your Airflow 3 instance.
 
-Step 8: Things to check
+Step 9: Things to check
 -----------------------
 
 Please consider checking the following things after upgrading your Airflow instance:

@@ -135,11 +135,26 @@ from. Your ``.airflowignore`` should look then like this (using the default ``gl
 Built-in ``PYTHONPATH`` entries in Airflow
 ------------------------------------------
 
-Airflow, when running dynamically adds three directories to the ``sys.path``:
+Airflow, when running dynamically adds directories to the ``sys.path``:
 
-- The ``dags`` folder: It is configured with option ``dags_folder`` in section ``[core]``.
 - The ``config`` folder: It is configured by setting ``AIRFLOW_HOME`` variable (``{AIRFLOW_HOME}/config``) by default.
 - The ``plugins`` Folder: It is configured with option ``plugins_folder`` in section ``[core]``.
+
+.. note::
+   **Airflow 3 change — Dag bundles replace the global dags folder on** ``sys.path``.
+
+   In Airflow 2, the ``dags`` folder (``dags_folder`` in section ``[core]``) was automatically
+   added to ``sys.path`` for every Airflow process, so bare imports like ``import my_shared_lib``
+   worked as long as ``my_shared_lib`` was inside ``DAGS_FOLDER``.
+
+   In Airflow 3, Dags are loaded via :doc:`dag-bundles`, and each bundle's root directory is
+   placed on ``sys.path`` individually during Dag processing and task execution.  The global
+   ``dags_folder`` is **no longer** added to ``sys.path`` automatically.  This means:
+
+   - Code that lives **inside** a bundle root continues to work with bare imports.
+   - Code that lives **outside** the bundle (e.g. a separate ``libs/`` directory in a monorepo)
+     must be made available via one of the strategies described in
+     :doc:`dag-bundles` (install as a package, copy into the bundle, or set ``PYTHONPATH``).
 
 .. note::
    The Dags folder in Airflow 2 and 3 should not be shared with the webserver. While you can do it, unlike in Airflow 1.10,
